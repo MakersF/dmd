@@ -4536,6 +4536,7 @@ final class Parser(AST) : Lexer
         const loc = token.loc;
         AST.TemplateParameters* tpl = null;
         AST.Parameters* parameters = null;
+        AST.Parameters* captures = null;
         int varargs = 0;
         AST.Type tret = null;
         StorageClass stc = 0;
@@ -4547,7 +4548,7 @@ final class Parser(AST) : Lexer
         case TOKdelegate:
             save = token.value;
             nextToken();
-            if (token.value != TOKlparen && token.value != TOKlcurly)
+            if (token.value != TOKlparen && token.value != TOKlcurly && token.value != TOKlbracket)
             {
                 // function type (parameters) { statements... }
                 // delegate type (parameters) { statements... }
@@ -4559,6 +4560,13 @@ final class Parser(AST) : Lexer
             {
                 // function (parameters) { statements... }
                 // delegate (parameters) { statements... }
+                goto case TOKlparen;
+            }
+            else if (token.value == TOKlbracket)
+            {
+                // function [capture] (parameters) { statements... }
+                // delegate [capture] (parameters) { statements... }
+                goto case TOKlbracket;
             }
             else
             {
@@ -4566,7 +4574,50 @@ final class Parser(AST) : Lexer
                 // delegate { statements... }
                 break;
             }
-            goto case TOKlparen;
+            assert(false);
+
+        case TOKlbracket:
+            {
+                // [captures] (parameters) => expression
+                // [captures] (parameters) { statements... }
+
+                nextToken();
+                captures = new AST.Parameters();
+                tpl = new AST.TemplateParameters();
+                while (token.value == TOKidentifier)
+                {
+                    Identifier id = Identifier.generateId("__T");
+                    AST.Type t = new AST.TypeIdentifier(loc, id);
+                    captures.push(new AST.Parameter(0, t, token.ident, null));
+                    AST.TemplateParameter tp = new AST.TemplateTypeParameter(loc, id, null, null);
+                    tpl.push(tp);
+                    nextToken();
+                    if (token.value == TOKcomma)
+                    {
+                        nextToken();
+                        continue;
+                    }
+                    break;
+                }
+                check(TOKrbracket);
+
+                if (token.value == TOKlparen)
+                {
+                    // [captures] (parameters) { statements... }
+                    goto case TOKlparen;
+                }
+                else if (token.value == TOKidentifier)
+                {
+                    // [captures] identifier => expression
+                    goto case TOKidentifier;
+                }
+                else
+                {
+                    // [captures] { statements... }
+                    break;
+                }
+                assert(false);
+            }
 
         case TOKlparen:
             {
@@ -4587,6 +4638,7 @@ final class Parser(AST) : Lexer
                 }
                 break;
             }
+
         case TOKlcurly:
             // { statements... }
             break;
@@ -4599,7 +4651,8 @@ final class Parser(AST) : Lexer
                 AST.Type t = new AST.TypeIdentifier(loc, id);
                 parameters.push(new AST.Parameter(0, t, token.ident, null));
 
-                tpl = new AST.TemplateParameters();
+                if (!tpl)
+                    tpl = new AST.TemplateParameters();
                 AST.TemplateParameter tp = new AST.TemplateTypeParameter(loc, id, null, null);
                 tpl.push(tp);
 
@@ -4631,10 +4684,22 @@ final class Parser(AST) : Lexer
 
         if (tpl)
         {
-            // Wrap a template around function fd
-            auto decldefs = new AST.Dsymbols();
-            decldefs.push(fd);
-            return new AST.TemplateDeclaration(fd.loc, fd.ident, tpl, null, decldefs, false, true);
+            if (false) //(captures)
+            {
+                // TODO
+                // Declare struct with fields equal to type of capture.
+                // Declare constructor and add it to struct
+                // Declare opCall function and add it to struct (make it a template if type needs to be deduced).
+                // Return struct declaration? Or struct declaration + instantiation?
+                assert(false);
+            }
+            else
+            {
+                // Wrap a template around function fd
+                auto decldefs = new AST.Dsymbols();
+                decldefs.push(fd);
+                return new AST.TemplateDeclaration(fd.loc, fd.ident, tpl, null, decldefs, false, true);
+            }
         }
         else
             return fd;
