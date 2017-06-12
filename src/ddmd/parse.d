@@ -4156,11 +4156,21 @@ final class Parser(AST) : Lexer
                     check(TOKassign);
 
                     AST.Declaration v;
+                    auto setPointerTo = function bool (Token* token, Token** tk)
+                    {
+                        if(!tk)
+                            return false;
+                        *tk = token;
+                        return true;
+                    };
                     if (token.value == TOKfunction ||
                         token.value == TOKdelegate ||
                         token.value == TOKlparen &&
                             skipAttributes(peekPastParen(&token), &tk) &&
                             (tk.value == TOKgoesto || tk.value == TOKlcurly) ||
+                        token.value == TOKlbracket &&
+                            setPointerTo(peekPastBraket(&token), &tk) &&
+                            (tk.value == TOKlparen || tk.value == TOKlcurly || tk.value == TOKidentifier) ||
                         token.value == TOKlcurly ||
                         token.value == TOKidentifier && peekNext() == TOKgoesto
                        )
@@ -4169,6 +4179,8 @@ final class Parser(AST) : Lexer
                         // delegate (parameters) { statements... }
                         // (parameters) { statements... }
                         // (parameters) => expression
+                        // [captures] (parameters) { statements... }
+                        // [captures] (parameters) => expression
                         // { statements... }
                         // identifier => expression
 
@@ -4548,7 +4560,7 @@ final class Parser(AST) : Lexer
         case TOKdelegate:
             save = token.value;
             nextToken();
-            if (token.value != TOKlparen && token.value != TOKlcurly && token.value != TOKlbracket)
+            if (token.value != TOKlparen && token.value != TOKlcurly)
             {
                 // function type (parameters) { statements... }
                 // delegate type (parameters) { statements... }
@@ -4560,13 +4572,6 @@ final class Parser(AST) : Lexer
             {
                 // function (parameters) { statements... }
                 // delegate (parameters) { statements... }
-                goto case TOKlparen;
-            }
-            else if (token.value == TOKlbracket)
-            {
-                // function [capture] (parameters) { statements... }
-                // delegate [capture] (parameters) { statements... }
-                goto case TOKlbracket;
             }
             else
             {
@@ -4574,11 +4579,11 @@ final class Parser(AST) : Lexer
                 // delegate { statements... }
                 break;
             }
-            assert(false);
+            goto case TOKlparen;
 
         case TOKlbracket:
             {
-                // [captures] (parameters) => expression
+                // [captures] identifier => expression
                 // [captures] (parameters) { statements... }
 
                 nextToken();
@@ -4611,9 +4616,15 @@ final class Parser(AST) : Lexer
                     // [captures] identifier => expression
                     goto case TOKidentifier;
                 }
-                else
+                else if (token.value == TOKlcurly)
                 {
                     // [captures] { statements... }
+                    break;
+                }
+                else
+                {
+                    error(loc, "found '%s' when expecting '%s', '%s' or '%s'", token.toChars(),
+                        Token.toChars(TOKlparen), Token.toChars(TOKidentifier), Token.toChars(TOKlcurly));
                     break;
                 }
                 assert(false);
@@ -7571,6 +7582,11 @@ final class Parser(AST) : Lexer
                  *  [ value, value, value ... ]
                  *  [ key:value, key:value, key:value ... ]
                  */
+                Token* tk = peekPastBraket(&token);
+                if (tk.value == TOKlparen || tk.value == TOKlcurly || tk.value == TOKidentifier)
+                {
+                    goto case_delegate;
+                }
                 auto values = new AST.Expressions();
                 AST.Expressions* keys = null;
 

@@ -1068,7 +1068,10 @@ class Lexer
      * tk is on the opening (.
      * Look ahead and return token that is past the closing ).
      */
-    final Token* peekPastParen(Token* tk)
+    alias peekPastParen = peekPastBrace!(TOKlparen, TOKrparen);
+    alias peekPastBraket = peekPastBrace!(TOKlbracket, TOKrbracket);
+
+    Token* peekPastBrace(TOK openToken, TOK closeToken)(Token* tk)
     {
         //printf("peekPastParen()\n");
         int parens = 1;
@@ -1079,10 +1082,10 @@ class Lexer
             //tk.print();
             switch (tk.value)
             {
-            case TOKlparen:
+            case openToken:
                 parens++;
                 continue;
-            case TOKrparen:
+            case closeToken:
                 --parens;
                 if (parens)
                     continue;
